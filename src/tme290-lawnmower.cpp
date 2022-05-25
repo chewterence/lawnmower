@@ -20,6 +20,24 @@
 #include "cluon-complete.hpp"
 #include "tme290-sim-grass-msg.hpp"
 
+// Variables to receive
+uint32 i;
+uint32 j;
+uint64 time;
+float grassTopLeft;
+float grassTopCentre;
+float grassTopRight;
+float grassLeft;
+float grassCentre;
+float grassRight;
+float grassBottomLeft;
+float grassBottomCentre;
+float grassBottomRight;
+float rain;
+float battery;
+float rainCloudDirX;
+float rainCloudDirY;
+
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
@@ -42,6 +60,25 @@ int32_t main(int32_t argc, char **argv) {
       {
         auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
+
+        i = msg.i();
+        j = msg.j();
+        time = msg.time();
+        grassTopLeft = msg.grassTopLeft();
+        grassTopCentre = msg.grassTopCentre();
+        grassTopRight = msg.grassTopRight();
+        grassRight = msg.grassRight();
+        grassBottomRight = msg.grassBottomRight();
+        grassBottomCentre = msg.grassBottomCentre();
+        grassBottomLeft = msg.grassBottomLeft();
+        grassLeft = msg.grassLeft();
+        grassCentre = msg.grassCentre();
+        rain = msg.rain();
+        battery = msg.battery();
+        rainCloudDirX = msg.rainCloudDirX();
+        rainCloudDirY = msg.rainCloudDirY();
+
+        std::cout << i << ", " << j << " t = " << time << std::endl;
         
         someVariable++;
 
@@ -53,9 +90,6 @@ int32_t main(int32_t argc, char **argv) {
         } else {
           control.command(5);
         }
-
-        std::cout << "Rain reading " << msg.rain() << ", direction (" <<
-         msg.rainCloudDirX() << ", " << msg.rainCloudDirY() << ")" << std::endl; 
 
         od4.send(control);
       }};
