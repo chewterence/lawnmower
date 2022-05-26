@@ -8,7 +8,7 @@ sends a control action, and the grass simulator responds with sensor values.
 
 Combile this software according to:
 
-    docker build -f tme290-lawnmower .
+    docker build -t tme290-lawnmower .
 
 And run with :
 

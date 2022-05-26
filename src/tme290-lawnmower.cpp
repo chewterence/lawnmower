@@ -21,9 +21,9 @@
 #include "tme290-sim-grass-msg.hpp"
 
 // Variables to receive
-uint32 i;
-uint32 j;
-uint64 time;
+int32_t i;
+int32_t j;
+// time_t time;
 float grassTopLeft;
 float grassTopCentre;
 float grassTopRight;
@@ -54,16 +54,14 @@ int32_t main(int32_t argc, char **argv) {
     
     cluon::OD4Session od4{cid};
 
-   int32_t someVariable{0};
-
     auto onSensors{[&od4, &someVariable](cluon::data::Envelope &&envelope)
       {
         auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
 
-        i = msg.i();
-        j = msg.j();
-        time = msg.time();
+        // i = msg.i();
+        // j = msg.j();
+        // time = msg.time();
         grassTopLeft = msg.grassTopLeft();
         grassTopCentre = msg.grassTopCentre();
         grassTopRight = msg.grassTopRight();
@@ -78,18 +76,14 @@ int32_t main(int32_t argc, char **argv) {
         rainCloudDirX = msg.rainCloudDirX();
         rainCloudDirY = msg.rainCloudDirY();
 
-        std::cout << i << ", " << j << " t = " << time << std::endl;
-        
-        someVariable++;
+        // std::cout << i << ", " << j << " t = " << time << std::endl;
 
         tme290::grass::Control control;
 
-        // After 20 steps, start pausing on every other step.
-        if (someVariable > 20 && someVariable % 2 == 0) {
-          control.command(0);
-        } else {
-          control.command(5);
-        }
+        // Main control logic can go here
+
+
+        control.command(4);
 
         od4.send(control);
       }};
@@ -99,7 +93,7 @@ int32_t main(int32_t argc, char **argv) {
         auto msg = cluon::extractMessage<tme290::grass::Status>(
             std::move(envelope));
         if (verbose) {
-          std::cout << "Status at time " << msg.time() << ": " 
+          std::cout << "TEST Status at time " << msg.time() << ": " 
             << msg.grassMean() << "/" << msg.grassMax() << std::endl;
         }
       }};
