@@ -21,7 +21,7 @@
 #include "tme290-sim-grass-msg.hpp"
 
 // Definitions and enumerations
-enum State { RETURN_TO_CHARGE, STAY_AND_CHARGE, STOP_AND_CUT, SEEK_FOR_GRASS, ERROR };
+enum State { RETURN_TO_CHARGE, STAY_AND_CHARGE, RETURN_TO_LASTCUT, SEEK_FOR_GRASS, STORE_LASTCUT, ERROR };
 static const int MOVE_STAY = 0;
 static const int MOVE_TOP_LEFT = 1;
 static const int MOVE_TOP_CENTRE = 2;
@@ -32,8 +32,10 @@ static const int MOVE_BOTTOM_CENTRE = 6;
 static const int MOVE_BOTTOM_LEFT = 7;
 static const int MOVE_LEFT = 8;
 
-State updateState(State currentState, float battery, int32_t i, int32_t j) {
+State updateState(State currentState, float battery, int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j) {
   switch (currentState) {
+    case STORE_LASTCUT:
+      return RETURN_TO_CHARGE;
     case RETURN_TO_CHARGE:
       if (i == 0 && j == 0) {
         return STAY_AND_CHARGE;
@@ -43,7 +45,7 @@ State updateState(State currentState, float battery, int32_t i, int32_t j) {
       }
     case SEEK_FOR_GRASS:
       if (battery < 0.4) {
-        return RETURN_TO_CHARGE;
+        return STORE_LASTCUT;
       }
       else {
         return SEEK_FOR_GRASS;
@@ -53,13 +55,19 @@ State updateState(State currentState, float battery, int32_t i, int32_t j) {
         return STAY_AND_CHARGE;
       }
       else {
+        return RETURN_TO_LASTCUT;
+      }
+    case RETURN_TO_LASTCUT:
+      if (i != lastcut_i && j != lastcut_j) {
+        return RETURN_TO_LASTCUT;
+      }
+      else {
         return SEEK_FOR_GRASS;
       }
     default:
       return ERROR;
   }
 }
-
 
 int seekForGrass(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
   bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
@@ -73,7 +81,7 @@ int seekForGrass(float grassTopLeft, float grassTopCentre, float grassTopRight, 
 
   // If everywhere is invalid, stay on the spot to get a sensing first
   if (isTopLeftInvalid && isTopCentreInvalid && isTopRightInvalid && isRightInvalid && isBottomRightInvalid && isBottomCentreInvalid && isBottomLeftInvalid && isLeftInvalid) {
-    return 0;
+    return MOVE_STAY;
   }
 
   float maxGrassHeight = 0.0;
@@ -115,6 +123,35 @@ int seekForGrass(float grassTopLeft, float grassTopCentre, float grassTopRight, 
   return maxGrassDir;
 }
 
+int returnToLastCut(int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j) {
+  int32_t delta_i = lastcut_i - i;
+  int32_t delta_j = lastcut_j - j;
+  bool isPositiveDelta_i = delta_i > 0;
+  bool isPositiveDelta_j = delta_j > 0;
+  bool isZeroDelta_i = delta_i == 0;
+  bool isZeroDelta_j = delta_j == 0;
+  if (isZeroDelta_i && !isZeroDelta_j) {
+    return MOVE_BOTTOM_CENTRE;
+  }
+  if (!isZeroDelta_i && isZeroDelta_j) {
+    //TODO: split into left and rights for the lower hemisphere
+    return MOVE_RIGHT;
+  }
+  if (isPositiveDelta_i && isPositiveDelta_j) {
+    return MOVE_BOTTOM_RIGHT;
+  }
+  if (isPositiveDelta_i && !isPositiveDelta_j) {
+    return MOVE_TOP_RIGHT;
+  }
+  if (!isPositiveDelta_i && isPositiveDelta_j) {
+    return MOVE_BOTTOM_LEFT;
+  }
+  if (!isPositiveDelta_i && !isPositiveDelta_j) {
+    return MOVE_TOP_LEFT;
+  }
+  return MOVE_RIGHT;
+}
+
 int returnToCharge(int32_t i, int32_t j) {
   if (j == 0) {
     return MOVE_LEFT;
@@ -128,7 +165,11 @@ int returnToCharge(int32_t i, int32_t j) {
 
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
+
   State currentState = SEEK_FOR_GRASS;
+  int32_t lastcut_i {-1};
+  int32_t lastcut_j {-1};
+
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
   if (0 == commandlineArguments.count("cid")) {
     std::cerr << argv[0] 
@@ -143,7 +184,7 @@ int32_t main(int32_t argc, char **argv) {
     
     cluon::OD4Session od4{cid};
 
-    auto onSensors{[&od4, &currentState](cluon::data::Envelope &&envelope)
+    auto onSensors{[&od4, &currentState, &lastcut_i, &lastcut_j](cluon::data::Envelope &&envelope)
       {
         auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
@@ -165,8 +206,11 @@ int32_t main(int32_t argc, char **argv) {
         float rainCloudDirX = msg.rainCloudDirX();
         float rainCloudDirY = msg.rainCloudDirY();
 
-        std::cout << "battery: " << battery << " i: " << i << " j: " << j << std::endl;
+        // float grassHeightCutThreshold = 0.3;
+
+        std::cout << "STATE: " << currentState << std::endl;
         std::cout << "rain: " << rain << " rainDirX: " << rainCloudDirX << " rainDirY: " << rainCloudDirY << std::endl;
+        std::cout << "lastcut_i: " << lastcut_i << " lastcut_j: " << lastcut_j << std::endl;
         std::cout << grassTopLeft << " " << grassTopCentre << " " << grassTopRight << std::endl;
         std::cout << grassLeft << " " << grassCentre << " " << grassRight << std::endl;
         std::cout << grassBottomLeft << " " << grassBottomCentre << " " << grassBottomRight << std::endl << std::endl;
@@ -179,10 +223,17 @@ int32_t main(int32_t argc, char **argv) {
         // state = getNextState()
 
 
-
+        // Determine behaviour
         switch(currentState) {
           case SEEK_FOR_GRASS:
+            lastcut_i = -1;
+            lastcut_j = -1;
             currentCommand = seekForGrass(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
+            break;
+          case STORE_LASTCUT:
+            lastcut_i = i;
+            lastcut_j = j;
+            currentCommand = returnToCharge(i, j);
             break;
           case RETURN_TO_CHARGE:
             currentCommand = returnToCharge(i, j);
@@ -190,11 +241,15 @@ int32_t main(int32_t argc, char **argv) {
           case STAY_AND_CHARGE:
             currentCommand = MOVE_STAY;
             break;
+          case RETURN_TO_LASTCUT:
+            currentCommand = returnToLastCut(i, j, lastcut_i, lastcut_j);
+            break;
           default:
             break;
         }
 
-        currentState = updateState(currentState, battery, i, j);
+        // Update state
+        currentState = updateState(currentState, battery, i, j, lastcut_i, lastcut_j);
 
         control.command(currentCommand);
         od4.send(control);
