@@ -20,27 +20,9 @@
 #include "cluon-complete.hpp"
 #include "tme290-sim-grass-msg.hpp"
 
-// Variables to receive
-int32_t i;
-int32_t j;
-float grassTopLeft;
-float grassTopCentre;
-float grassTopRight;
-float grassLeft;
-float grassCentre;
-float grassRight;
-float grassBottomLeft;
-float grassBottomCentre;
-float grassBottomRight;
-float rain;
-float battery;
-float rainCloudDirX;
-float rainCloudDirY;
-
 enum State { RETURN_TO_CHARGE, STAY_AND_CHARGE, STOP_AND_CUT, SEEK_FOR_GRASS };
 
-// int seekForGrass(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft, float grassCentre) {
-int seekForGrass() {
+int seekForGrassControl(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
   bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
   bool isTopCentreInvalid = grassTopCentre - -1 < 0.01f;
   bool isTopRightInvalid = grassTopRight - -1 < 0.01f;
@@ -58,7 +40,7 @@ int seekForGrass() {
   float maxGrassHeight = 0.0;
   int maxGrassDir = 0;
 
-  // Find the maximum grass
+  // Find the maximum grass and go to that direction
   if (grassTopLeft > maxGrassHeight) {
     maxGrassHeight = grassTopLeft;
     maxGrassDir = 1;
@@ -120,21 +102,21 @@ int32_t main(int32_t argc, char **argv) {
             std::move(envelope));
 
         int currentCommand {-1};
-        i = msg.i();
-        j = msg.j();
-        grassTopLeft = msg.grassTopLeft();
-        grassTopCentre = msg.grassTopCentre();
-        grassTopRight = msg.grassTopRight();
-        grassRight = msg.grassRight();
-        grassBottomRight = msg.grassBottomRight();
-        grassBottomCentre = msg.grassBottomCentre();
-        grassBottomLeft = msg.grassBottomLeft();
-        grassLeft = msg.grassLeft();
-        grassCentre = msg.grassCentre();
-        rain = msg.rain();
-        battery = msg.battery();
-        rainCloudDirX = msg.rainCloudDirX();
-        rainCloudDirY = msg.rainCloudDirY();
+        int32_t i = msg.i();
+        int32_t j = msg.j();
+        float grassTopLeft = msg.grassTopLeft();
+        float grassTopCentre = msg.grassTopCentre();
+        float grassTopRight = msg.grassTopRight();
+        float grassRight = msg.grassRight();
+        float grassBottomRight = msg.grassBottomRight();
+        float grassBottomCentre = msg.grassBottomCentre();
+        float grassBottomLeft = msg.grassBottomLeft();
+        float grassLeft = msg.grassLeft();
+        float grassCentre = msg.grassCentre();
+        float rain = msg.rain();
+        float battery = msg.battery();
+        float rainCloudDirX = msg.rainCloudDirX();
+        float rainCloudDirY = msg.rainCloudDirY();
 
         std::cout << "battery: " << battery << " i: " << i << " j: " << j << std::endl;
         std::cout << "rain: " << rain << " rainDirX: " << rainCloudDirX << " rainDirY: " << rainCloudDirY << std::endl;
@@ -153,12 +135,14 @@ int32_t main(int32_t argc, char **argv) {
 
         switch(currentState) {
           case SEEK_FOR_GRASS:
-            // currentCommand = seekForGrass(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft, grassCentre);
-            currentCommand = seekForGrass();
+            currentCommand = seekForGrassControl(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
+            // currentCommand = seekForGrassControl();
             break;
           default:
           break;
         }
+
+        // currentState = updateState();
 
         control.command(currentCommand);
         od4.send(control);
