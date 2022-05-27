@@ -32,15 +32,19 @@ static const int MOVE_BOTTOM_CENTRE = 6;
 static const int MOVE_BOTTOM_LEFT = 7;
 static const int MOVE_LEFT = 8;
 
-State updateState(State currentState, float battery, int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j, float grassCentre) {
+State updateState(State currentState, float battery, float batteryDrainThreshold, int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j, float grassCentre, float transientCutGrassThreshold) {
   switch (currentState) {
-    // case TRANSIENT_CUT:
-    //   if (grassCentre > 0.5) {
-    //     return STATIONARY_CUT;
-    //   }
-    //   else {
-    //     return TRANSIENT_CUT;
-    //   }
+    case TRANSIENT_CUT:
+      // Only stay and cut if too long
+      if (battery < batteryDrainThreshold) {
+        return STORE_LASTCUT;
+      }
+      if (grassCentre > transientCutGrassThreshold) {
+        return STATIONARY_CUT;
+      }
+      else {
+        return TRANSIENT_CUT;
+      }
     case STORE_LASTCUT:
       return RETURN_TO_CHARGE;
     case RETURN_TO_CHARGE:
@@ -51,12 +55,10 @@ State updateState(State currentState, float battery, int32_t i, int32_t j, int32
         return RETURN_TO_CHARGE;
       }
     case STATIONARY_CUT:
-      if (battery < 0.4) {
+      if (battery < batteryDrainThreshold) {
         return STORE_LASTCUT;
       }
-      else {
-        return STATIONARY_CUT;
-      }
+      return TRANSIENT_CUT;
     case STAY_AND_CHARGE:
       if (battery < 0.98) {
         return STAY_AND_CHARGE;
@@ -78,20 +80,36 @@ State updateState(State currentState, float battery, int32_t i, int32_t j, int32
   }
 }
 
-int stationaryCut(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
-  bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
-  bool isTopCentreInvalid = grassTopCentre - -1 < 0.01f;
-  bool isTopRightInvalid = grassTopRight - -1 < 0.01f;
-  bool isRightInvalid = grassRight - -1 < 0.01f;
-  bool isBottomRightInvalid = grassBottomRight - -1 < 0.01f;
-  bool isBottomCentreInvalid = grassBottomCentre - -1 < 0.01f;
-  bool isBottomLeftInvalid = grassBottomLeft - -1 < 0.01f;
-  bool isLeftInvalid = grassLeft - -1 < 0.01f;
-
-  // If everywhere is invalid, stay on the spot to get a sensing first
-  if (isTopLeftInvalid && isTopCentreInvalid && isTopRightInvalid && isRightInvalid && isBottomRightInvalid && isBottomCentreInvalid && isBottomLeftInvalid && isLeftInvalid) {
+int transientCut(int32_t i, int32_t j, float grassCentre, float transientCutGrassThreshold) {
+  // Stay and cut if too long
+  if (grassCentre > transientCutGrassThreshold) {
     return MOVE_STAY;
   }
+  // Otherwise move in the default 'Z' direction
+
+  if (j < 17) {
+    return MOVE_BOTTOM_RIGHT;
+  }
+  if (j == 16 && i < 25) {
+    return MOVE_RIGHT;
+  }
+  return MOVE_BOTTOM_LEFT;
+}
+
+int stationaryCut(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
+  // bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
+  // bool isTopCentreInvalid = grassTopCentre - -1 < 0.01f;
+  // bool isTopRightInvalid = grassTopRight - -1 < 0.01f;
+  // bool isRightInvalid = grassRight - -1 < 0.01f;
+  // bool isBottomRightInvalid = grassBottomRight - -1 < 0.01f;
+  // bool isBottomCentreInvalid = grassBottomCentre - -1 < 0.01f;
+  // bool isBottomLeftInvalid = grassBottomLeft - -1 < 0.01f;
+  // bool isLeftInvalid = grassLeft - -1 < 0.01f;
+
+  // If everywhere is invalid, stay on the spot to get a sensing first
+  // if (isTopLeftInvalid && isTopCentreInvalid && isTopRightInvalid && isRightInvalid && isBottomRightInvalid && isBottomCentreInvalid && isBottomLeftInvalid && isLeftInvalid) {
+  //   return MOVE_STAY;
+  // }
 
   float maxGrassHeight = 0.0;
   int maxGrassDir = MOVE_STAY;
@@ -139,12 +157,23 @@ int returnToLastCut(int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j) 
   bool isPositiveDelta_j = delta_j > 0;
   bool isZeroDelta_i = delta_i == 0;
   bool isZeroDelta_j = delta_j == 0;
+
+  // If stuck at the wall from top
+  if (lastcut_j > 16 && j == 16 && i < 25) {
+    return MOVE_RIGHT;
+  }
+
   if (isZeroDelta_i && !isZeroDelta_j) {
     return MOVE_BOTTOM_CENTRE;
   }
   if (!isZeroDelta_i && isZeroDelta_j) {
-    //TODO: split into left and rights for the lower hemisphere
-    return MOVE_RIGHT;
+    // Split into left and rights for the lower hemisphere
+    if (isPositiveDelta_i) {
+      return MOVE_RIGHT;
+    }
+    else {
+      return MOVE_LEFT;
+    }
   }
   if (isPositiveDelta_i && isPositiveDelta_j) {
     return MOVE_BOTTOM_RIGHT;
@@ -165,10 +194,13 @@ int returnToCharge(int32_t i, int32_t j) {
   if (j == 0) {
     return MOVE_LEFT;
   }
+  // If stuck at bottom wall
+  if (j == 18 && i < 24) {
+    return MOVE_RIGHT;
+  }
   if (j < 18) {
     return MOVE_TOP_LEFT;
   }
-  i = i;
   return MOVE_TOP_RIGHT;
 }
 
@@ -216,7 +248,9 @@ int32_t main(int32_t argc, char **argv) {
         float rainCloudDirX = msg.rainCloudDirX();
         float rainCloudDirY = msg.rainCloudDirY();
 
-        // float grassHeightCutThreshold = 0.3;
+        // Parameters to be tuned
+        float batteryDrainThreshold = 0.2f; // If battery drains below this value the lawnmower will return to charge
+        float transientCutGrassThreshold = 0.5f; // If current grass value is above this value the lawnmower will stay and cut
 
         std::cout << "STATE: " << currentState << std::endl;
         std::cout << "rain: " << rain << " rainDirX: " << rainCloudDirX << " rainDirY: " << rainCloudDirY << std::endl;
@@ -227,14 +261,11 @@ int32_t main(int32_t argc, char **argv) {
 
         tme290::grass::Control control;
 
-        // Main control logic can go here
-        // switch state
-        // control = getStateBehaviour(para1, para2, para3)
-        // state = getNextState()
-
-
         // Determine behaviour
         switch(currentState) {
+          case TRANSIENT_CUT:
+            currentCommand = transientCut(i, j, grassCentre, transientCutGrassThreshold);
+            break;
           case STATIONARY_CUT:
             currentCommand = stationaryCut(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
             break;
@@ -257,7 +288,7 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         // Update state
-        currentState = updateState(currentState, battery, i, j, lastcut_i, lastcut_j, grassCentre);
+        currentState = updateState(currentState, battery, batteryDrainThreshold, i, j, lastcut_i, lastcut_j, grassCentre, transientCutGrassThreshold);
         lastCommand = currentCommand;
         control.command(currentCommand);
         od4.send(control);
