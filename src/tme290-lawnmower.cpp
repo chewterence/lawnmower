@@ -58,11 +58,12 @@ State updateState(State currentState, float battery, int32_t i, int32_t j, int32
         return RETURN_TO_LASTCUT;
       }
     case RETURN_TO_LASTCUT:
-      if (i != lastcut_i && j != lastcut_j) {
-        return RETURN_TO_LASTCUT;
+      // If already at the last cut point, then change state
+      if (i == lastcut_i && j == lastcut_j) {
+        return SEEK_FOR_GRASS;
       }
       else {
-        return SEEK_FOR_GRASS;
+        return RETURN_TO_LASTCUT;
       }
     default:
       return ERROR;
