@@ -23,7 +23,6 @@
 // Variables to receive
 int32_t i;
 int32_t j;
-// time_t time;
 float grassTopLeft;
 float grassTopCentre;
 float grassTopRight;
@@ -38,11 +37,69 @@ float battery;
 float rainCloudDirX;
 float rainCloudDirY;
 
-enum State { returnToCharge, stayAndCharge };
+enum State { RETURN_TO_CHARGE, STAY_AND_CHARGE, STOP_AND_CUT, SEEK_FOR_GRASS };
+
+// int seekForGrass(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft, float grassCentre) {
+int seekForGrass() {
+  bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
+  bool isTopCentreInvalid = grassTopCentre - -1 < 0.01f;
+  bool isTopRightInvalid = grassTopRight - -1 < 0.01f;
+  bool isRightInvalid = grassRight - -1 < 0.01f;
+  bool isBottomRightInvalid = grassBottomRight - -1 < 0.01f;
+  bool isBottomCentreInvalid = grassBottomCentre - -1 < 0.01f;
+  bool isBottomLeftInvalid = grassBottomLeft - -1 < 0.01f;
+  bool isLeftInvalid = grassLeft - -1 < 0.01f;
+
+  // If everywhere is invalid, stay on the spot to get a sensing first
+  if (isTopLeftInvalid && isTopCentreInvalid && isTopRightInvalid && isRightInvalid && isBottomRightInvalid && isBottomCentreInvalid && isBottomLeftInvalid && isLeftInvalid) {
+    return 0;
+  }
+
+  float maxGrassHeight = 0.0;
+  int maxGrassDir = 0;
+
+  // Find the maximum grass
+  if (grassTopLeft > maxGrassHeight) {
+    maxGrassHeight = grassTopLeft;
+    maxGrassDir = 1;
+  }
+  if (grassTopCentre > maxGrassHeight) {
+    maxGrassHeight = grassTopCentre;
+    maxGrassDir = 2;
+  }
+  if (grassTopRight > maxGrassHeight) {
+    maxGrassHeight = grassTopRight;
+    maxGrassDir = 3;
+  }
+  if (grassRight > maxGrassHeight) {
+    maxGrassHeight = grassRight;
+    maxGrassDir = 4;
+  }
+  if (grassBottomRight > maxGrassHeight) {
+    maxGrassHeight = grassBottomRight;
+    maxGrassDir = 5;
+  }
+  if (grassBottomCentre > maxGrassHeight) {
+    maxGrassHeight = grassBottomCentre;
+    maxGrassDir = 6;
+  }
+  if (grassBottomLeft > maxGrassHeight) {
+    maxGrassHeight = grassBottomLeft;
+    maxGrassDir = 7;
+  }
+  if (grassLeft > maxGrassHeight) {
+    maxGrassHeight = grassLeft;
+    maxGrassDir = 8;
+  }
+  return maxGrassDir;
+
+
+
+}
 
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
-  // State currentState = ;
+  State currentState = SEEK_FOR_GRASS;
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
   if (0 == commandlineArguments.count("cid")) {
     std::cerr << argv[0] 
@@ -57,16 +114,14 @@ int32_t main(int32_t argc, char **argv) {
     
     cluon::OD4Session od4{cid};
 
-    int timestep = 0;
-
-    auto onSensors{[&od4, &timestep](cluon::data::Envelope &&envelope)
+    auto onSensors{[&od4, &currentState](cluon::data::Envelope &&envelope)
       {
         auto msg = cluon::extractMessage<tme290::grass::Sensors>(
             std::move(envelope));
 
+        int currentCommand {-1};
         i = msg.i();
         j = msg.j();
-        // time = msg.time();
         grassTopLeft = msg.grassTopLeft();
         grassTopCentre = msg.grassTopCentre();
         grassTopRight = msg.grassTopRight();
@@ -81,7 +136,7 @@ int32_t main(int32_t argc, char **argv) {
         rainCloudDirX = msg.rainCloudDirX();
         rainCloudDirY = msg.rainCloudDirY();
 
-        std::cout << "battery: " << battery << " i: " << i << " j: " << j << " t: " << timestep << std::endl;
+        std::cout << "battery: " << battery << " i: " << i << " j: " << j << std::endl;
         std::cout << "rain: " << rain << " rainDirX: " << rainCloudDirX << " rainDirY: " << rainCloudDirY << std::endl;
         std::cout << grassTopLeft << " " << grassTopCentre << " " << grassTopRight << std::endl;
         std::cout << grassLeft << " " << grassCentre << " " << grassRight << std::endl;
@@ -96,52 +151,16 @@ int32_t main(int32_t argc, char **argv) {
 
 
 
-        // switch(currentState) {
-        //   case returnToCharge: 
-        //   break;
-
-        //   default:
-        //   break;
-        // }
-
-        timestep++;
-
-        if (timestep % 8 == 0 || timestep % 8 == 1) {
-          if (timestep % 8 == 0) {
-            control.command(4);
-          }
-          else {
-            control.command(0);
-          }
-        }
-        else if (timestep % 8 == 2 || timestep % 8 == 3) {
-          if (timestep % 8 == 2) {
-            control.command(6);
-          }
-          else {
-
-          }
-        }
-        else if (timestep % 8 == 4 || timestep % 8 == 4) {
-          if (timestep % 8 == 4 ) {
-            control.command(8);
-          }
-          else {
-            control.command(0);
-          }
-        }
-        else if (timestep % 8 == 6 || timestep % 8 == 7) {
-          if (timestep % 8 == 6) {
-            control.command(2);
-          }
-          else {
-            control.command(0);
-          }
-        }
-        else {
-          control.command(0);
+        switch(currentState) {
+          case SEEK_FOR_GRASS:
+            // currentCommand = seekForGrass(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft, grassCentre);
+            currentCommand = seekForGrass();
+            break;
+          default:
+          break;
         }
 
+        control.command(currentCommand);
         od4.send(control);
       }};
 
