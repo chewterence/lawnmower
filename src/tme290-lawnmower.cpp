@@ -20,9 +20,48 @@
 #include "cluon-complete.hpp"
 #include "tme290-sim-grass-msg.hpp"
 
-enum State { RETURN_TO_CHARGE, STAY_AND_CHARGE, STOP_AND_CUT, SEEK_FOR_GRASS };
+// Definitions and enumerations
+enum State { RETURN_TO_CHARGE, STAY_AND_CHARGE, STOP_AND_CUT, SEEK_FOR_GRASS, ERROR };
+static const int MOVE_STAY = 0;
+static const int MOVE_TOP_LEFT = 1;
+static const int MOVE_TOP_CENTRE = 2;
+static const int MOVE_TOP_RIGHT = 3;
+static const int MOVE_RIGHT = 4;
+static const int MOVE_BOTTOM_RIGHT = 5;
+static const int MOVE_BOTTOM_CENTRE = 6;
+static const int MOVE_BOTTOM_LEFT = 7;
+static const int MOVE_LEFT = 8;
 
-int seekForGrassControl(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
+State updateState(State currentState, float battery, int32_t i, int32_t j) {
+  switch (currentState) {
+    case RETURN_TO_CHARGE:
+      if (i == 0 && j == 0) {
+        return STAY_AND_CHARGE;
+      }
+      else {
+        return RETURN_TO_CHARGE;
+      }
+    case SEEK_FOR_GRASS:
+      if (battery < 0.4) {
+        return RETURN_TO_CHARGE;
+      }
+      else {
+        return SEEK_FOR_GRASS;
+      }
+    case STAY_AND_CHARGE:
+      if (battery < 0.98) {
+        return STAY_AND_CHARGE;
+      }
+      else {
+        return SEEK_FOR_GRASS;
+      }
+    default:
+      return ERROR;
+  }
+}
+
+
+int seekForGrass(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
   bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
   bool isTopCentreInvalid = grassTopCentre - -1 < 0.01f;
   bool isTopRightInvalid = grassTopRight - -1 < 0.01f;
@@ -38,45 +77,53 @@ int seekForGrassControl(float grassTopLeft, float grassTopCentre, float grassTop
   }
 
   float maxGrassHeight = 0.0;
-  int maxGrassDir = 0;
+  int maxGrassDir = MOVE_STAY;
 
   // Find the maximum grass and go to that direction
   if (grassTopLeft > maxGrassHeight) {
     maxGrassHeight = grassTopLeft;
-    maxGrassDir = 1;
+    maxGrassDir = MOVE_TOP_LEFT;
   }
   if (grassTopCentre > maxGrassHeight) {
     maxGrassHeight = grassTopCentre;
-    maxGrassDir = 2;
+    maxGrassDir = MOVE_TOP_CENTRE;
   }
   if (grassTopRight > maxGrassHeight) {
     maxGrassHeight = grassTopRight;
-    maxGrassDir = 3;
+    maxGrassDir = MOVE_TOP_RIGHT;
   }
   if (grassRight > maxGrassHeight) {
     maxGrassHeight = grassRight;
-    maxGrassDir = 4;
+    maxGrassDir = MOVE_RIGHT;
   }
   if (grassBottomRight > maxGrassHeight) {
     maxGrassHeight = grassBottomRight;
-    maxGrassDir = 5;
+    maxGrassDir = MOVE_BOTTOM_RIGHT;
   }
   if (grassBottomCentre > maxGrassHeight) {
     maxGrassHeight = grassBottomCentre;
-    maxGrassDir = 6;
+    maxGrassDir = MOVE_BOTTOM_CENTRE;
   }
   if (grassBottomLeft > maxGrassHeight) {
     maxGrassHeight = grassBottomLeft;
-    maxGrassDir = 7;
+    maxGrassDir = MOVE_BOTTOM_LEFT;
   }
   if (grassLeft > maxGrassHeight) {
     maxGrassHeight = grassLeft;
-    maxGrassDir = 8;
+    maxGrassDir = MOVE_LEFT;
   }
   return maxGrassDir;
+}
 
-
-
+int returnToCharge(int32_t i, int32_t j) {
+  if (j == 0) {
+    return MOVE_LEFT;
+  }
+  if (j < 18) {
+    return MOVE_TOP_LEFT;
+  }
+  i = i;
+  return MOVE_TOP_RIGHT;
 }
 
 int32_t main(int32_t argc, char **argv) {
@@ -135,14 +182,19 @@ int32_t main(int32_t argc, char **argv) {
 
         switch(currentState) {
           case SEEK_FOR_GRASS:
-            currentCommand = seekForGrassControl(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
-            // currentCommand = seekForGrassControl();
+            currentCommand = seekForGrass(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
+            break;
+          case RETURN_TO_CHARGE:
+            currentCommand = returnToCharge(i, j);
+            break;
+          case STAY_AND_CHARGE:
+            currentCommand = MOVE_STAY;
             break;
           default:
-          break;
+            break;
         }
 
-        // currentState = updateState();
+        currentState = updateState(currentState, battery, i, j);
 
         control.command(currentCommand);
         od4.send(control);
