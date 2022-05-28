@@ -86,30 +86,16 @@ int transientCut(int32_t i, int32_t j, float grassCentre, float transientCutGras
     return MOVE_STAY;
   }
   // Otherwise move in the default 'Z' direction
-
-  if (j < 17) {
-    return MOVE_BOTTOM_RIGHT;
-  }
   if (j == 16 && i < 25) {
     return MOVE_RIGHT;
+  }
+  if (j < 17) {
+    return MOVE_BOTTOM_RIGHT;
   }
   return MOVE_BOTTOM_LEFT;
 }
 
 int stationaryCut(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
-  // bool isTopLeftInvalid = grassTopLeft - -1 < 0.01f;
-  // bool isTopCentreInvalid = grassTopCentre - -1 < 0.01f;
-  // bool isTopRightInvalid = grassTopRight - -1 < 0.01f;
-  // bool isRightInvalid = grassRight - -1 < 0.01f;
-  // bool isBottomRightInvalid = grassBottomRight - -1 < 0.01f;
-  // bool isBottomCentreInvalid = grassBottomCentre - -1 < 0.01f;
-  // bool isBottomLeftInvalid = grassBottomLeft - -1 < 0.01f;
-  // bool isLeftInvalid = grassLeft - -1 < 0.01f;
-
-  // If everywhere is invalid, stay on the spot to get a sensing first
-  // if (isTopLeftInvalid && isTopCentreInvalid && isTopRightInvalid && isRightInvalid && isBottomRightInvalid && isBottomCentreInvalid && isBottomLeftInvalid && isLeftInvalid) {
-  //   return MOVE_STAY;
-  // }
 
   float maxGrassHeight = 0.0;
   int maxGrassDir = MOVE_STAY;
@@ -191,15 +177,21 @@ int returnToLastCut(int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j) 
 }
 
 int returnToCharge(int32_t i, int32_t j) {
-  if (j == 0) {
+  if (j == 0 && i != 0) {
     return MOVE_LEFT;
   }
+  if (j != 0 && i == 0 && j < 17) {
+    return MOVE_TOP_CENTRE;
+  }
   // If stuck at bottom wall
-  if (j == 18 && i < 24) {
+  if (j == 18 && i < 23) {
     return MOVE_RIGHT;
   }
   if (j < 18) {
     return MOVE_TOP_LEFT;
+  }
+  if (j >= 18 && i > 24) {
+    return MOVE_TOP_CENTRE;
   }
   return MOVE_TOP_RIGHT;
 }
@@ -249,12 +241,32 @@ int32_t main(int32_t argc, char **argv) {
         float rainCloudDirY = msg.rainCloudDirY();
 
         // Parameters to be tuned
-        float batteryDrainThreshold = 0.2f; // If battery drains below this value the lawnmower will return to charge
+        // If battery drains below this value the lawnmower will return to charge
+        float batteryDrainThreshold;
+        float batteryDrainThresholdQ1 = 0.2f;
+        float batteryDrainThresholdQ2 = 0.3f;
+        float batteryDrainThresholdQ3 = 0.4f;
+        float batteryDrainThresholdQ4 = 0.5f;
+
+        // Determine which quadrant the battery threshold is
+        if (0 <= i && i <= 23 && 0 <= j && j <= 17) {
+          batteryDrainThreshold = batteryDrainThresholdQ1;
+        }
+        else if (i > 23 && j <= 17) {
+          batteryDrainThreshold = batteryDrainThresholdQ2;
+        }
+        else if (j > 17 && i > 23) {
+          batteryDrainThreshold = batteryDrainThresholdQ3;
+        }
+        else {
+          batteryDrainThreshold = batteryDrainThresholdQ4;
+        }
+
         float transientCutGrassThreshold = 0.5f; // If current grass value is above this value the lawnmower will stay and cut
 
         std::cout << "STATE: " << currentState << std::endl;
         std::cout << "rain: " << rain << " rainDirX: " << rainCloudDirX << " rainDirY: " << rainCloudDirY << std::endl;
-        std::cout << "lastcut_i: " << lastcut_i << " lastcut_j: " << lastcut_j << std::endl;
+        std::cout << "lastcut_i: " << lastcut_i << " lastcut_j: " << lastcut_j << " bt: " << batteryDrainThreshold << std::endl;
         std::cout << grassTopLeft << " " << grassTopCentre << " " << grassTopRight << std::endl;
         std::cout << grassLeft << " " << grassCentre << " " << grassRight << std::endl;
         std::cout << grassBottomLeft << " " << grassBottomCentre << " " << grassBottomRight << std::endl << std::endl;
