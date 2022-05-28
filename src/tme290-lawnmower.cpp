@@ -32,14 +32,14 @@ static const int MOVE_BOTTOM_CENTRE = 6;
 static const int MOVE_BOTTOM_LEFT = 7;
 static const int MOVE_LEFT = 8;
 
-State updateState(State currentState, float battery, float batteryDrainThreshold, int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j, float grassCentre, float transientCutGrassThreshold) {
+State updateState(State currentState, float battery, float batteryDrainThreshold, int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j, float grassCentre, float transientCutGrassThreshold, float rain, float rainAvoidanceThreshold) {
   switch (currentState) {
     case TRANSIENT_CUT:
       // Only stay and cut if too long
       if (battery < batteryDrainThreshold) {
         return STORE_LASTCUT;
       }
-      if (grassCentre > transientCutGrassThreshold) {
+      if (grassCentre > transientCutGrassThreshold && rain < rainAvoidanceThreshold) {
         return STATIONARY_CUT;
       }
       else {
@@ -71,6 +71,9 @@ State updateState(State currentState, float battery, float batteryDrainThreshold
       if (i == lastcut_i && j == lastcut_j) {
         return STATIONARY_CUT;
       }
+      else if (grassCentre > transientCutGrassThreshold) {
+        return STATIONARY_CUT;
+      }
       else {
         return RETURN_TO_LASTCUT;
       }
@@ -85,14 +88,33 @@ int transientCut(int32_t i, int32_t j, float grassCentre, float transientCutGras
   if (grassCentre > transientCutGrassThreshold) {
     return MOVE_STAY;
   }
-  // Otherwise move in the default 'Z' direction
+  // Otherwise move in the default general direction
   if (j == 16 && i < 25) {
     return MOVE_RIGHT;
   }
   if (j < 17) {
-    return MOVE_BOTTOM_RIGHT;
+    // Random chance to deviate from the general direction
+    if (std::rand() % 4 <= 1) {
+      return MOVE_RIGHT;
+    }
+    else if (std::rand() % 4 == 2) {
+      return MOVE_BOTTOM_CENTRE;
+    }
+    else {
+      return MOVE_BOTTOM_RIGHT; // Ideal general direction
+    }
   }
-  return MOVE_BOTTOM_LEFT;
+
+    // Random chance to deviate from the general direction
+    if (std::rand() % 3 == 0) {
+      return MOVE_BOTTOM_CENTRE;
+    }
+    else if (std::rand() % 3 == 1) {
+      return MOVE_LEFT;
+    }
+    else {
+      return MOVE_BOTTOM_LEFT; // Ideal general direction
+    }
 }
 
 int stationaryCut(float grassTopLeft, float grassTopCentre, float grassTopRight, float grassRight, float grassBottomRight, float grassBottomCentre, float grassBottomLeft, float grassLeft) {
@@ -162,16 +184,52 @@ int returnToLastCut(int32_t i, int32_t j, int32_t lastcut_i, int32_t lastcut_j) 
     }
   }
   if (isPositiveDelta_i && isPositiveDelta_j) {
-    return MOVE_BOTTOM_RIGHT;
+    // Random chance to deviate from the general direction
+    if (std::rand() % 3 == 0) {
+      return MOVE_BOTTOM_CENTRE;
+    }
+    else if (std::rand() % 3 == 1) {
+      return MOVE_RIGHT;
+    }
+    else {
+      return MOVE_BOTTOM_RIGHT; // Ideal general direction
+    }
   }
   if (isPositiveDelta_i && !isPositiveDelta_j) {
-    return MOVE_TOP_RIGHT;
+    // Random chance to deviate from the general direction
+    if (std::rand() % 3 == 0) {
+      return MOVE_TOP_CENTRE;
+    }
+    else if (std::rand() % 3 == 1) {
+      return MOVE_RIGHT;
+    }
+    else {
+      return MOVE_TOP_RIGHT; // Ideal general direction
+    }
   }
   if (!isPositiveDelta_i && isPositiveDelta_j) {
-    return MOVE_BOTTOM_LEFT;
+    // Random chance to deviate from the general direction
+    if (std::rand() % 3 == 0) {
+      return MOVE_BOTTOM_CENTRE;
+    }
+    else if (std::rand() % 3 == 1) {
+      return MOVE_LEFT;
+    }
+    else {
+      return MOVE_BOTTOM_LEFT; // Ideal general direction
+    }
   }
   if (!isPositiveDelta_i && !isPositiveDelta_j) {
-    return MOVE_TOP_LEFT;
+    // Random chance to deviate from the general direction
+    if (std::rand() % 3 == 0) {
+      return MOVE_TOP_CENTRE;
+    }
+    else if (std::rand() % 3 == 1) {
+      return MOVE_LEFT;
+    }
+    else {
+      return MOVE_TOP_LEFT; // Ideal general direction
+    }
   }
   return MOVE_RIGHT;
 }
@@ -247,6 +305,8 @@ int32_t main(int32_t argc, char **argv) {
         float batteryDrainThresholdQ2 = 0.3f;
         float batteryDrainThresholdQ3 = 0.4f;
         float batteryDrainThresholdQ4 = 0.5f;
+        float transientCutGrassThreshold = 0.5f; // If current grass value is above this value the lawnmower will stay and cut
+        float rainAvoidanceThreshold = 0.4f; // If rain level is below this value then lawnmower can switch to stationary mode
 
         // Determine which quadrant the battery threshold is
         if (0 <= i && i <= 23 && 0 <= j && j <= 17) {
@@ -262,8 +322,7 @@ int32_t main(int32_t argc, char **argv) {
           batteryDrainThreshold = batteryDrainThresholdQ4;
         }
 
-        float transientCutGrassThreshold = 0.5f; // If current grass value is above this value the lawnmower will stay and cut
-
+      
         std::cout << "STATE: " << currentState << std::endl;
         std::cout << "rain: " << rain << " rainDirX: " << rainCloudDirX << " rainDirY: " << rainCloudDirY << std::endl;
         std::cout << "lastcut_i: " << lastcut_i << " lastcut_j: " << lastcut_j << " bt: " << batteryDrainThreshold << std::endl;
@@ -279,7 +338,8 @@ int32_t main(int32_t argc, char **argv) {
             currentCommand = transientCut(i, j, grassCentre, transientCutGrassThreshold);
             break;
           case STATIONARY_CUT:
-            currentCommand = stationaryCut(grassTopLeft, grassTopCentre, grassTopRight, grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
+            currentCommand = stationaryCut(grassTopLeft, grassTopCentre, grassTopRight, 
+              grassRight, grassBottomRight, grassBottomCentre, grassBottomLeft, grassLeft);
             break;
           case STORE_LASTCUT:
             lastcut_i = i;
@@ -300,7 +360,10 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         // Update state
-        currentState = updateState(currentState, battery, batteryDrainThreshold, i, j, lastcut_i, lastcut_j, grassCentre, transientCutGrassThreshold);
+        currentState = updateState(currentState, battery, batteryDrainThreshold,
+          i, j, lastcut_i, lastcut_j, grassCentre, transientCutGrassThreshold,
+          rain, rainAvoidanceThreshold);
+
         lastCommand = currentCommand;
         control.command(currentCommand);
         od4.send(control);
